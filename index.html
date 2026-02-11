@@ -98,7 +98,6 @@
                     }
                 };
                 
-                // Esperar o módulo carregar
                 const checkFirebase = setInterval(() => {
                     if (window.Firebase) {
                         clearInterval(checkFirebase);
@@ -157,43 +156,21 @@
                 try {
                     const { collection, addDoc, getDocs, query, where } = window.Firebase;
                     
-                    // Simulação de Auth usando Firestore (já que Auth real requer config externa)
-                    // Buscar se email já existe
                     const existingUser = usersData.find(u => u.email === formData.email);
 
                     if (isLogin) {
                         if (!existingUser || existingUser.password !== formData.password) {
                             throw new Error("Email ou senha inválidos.");
                         }
-                        // Pegar dados da org
-                        // Aqui assumimos que onLogin vai setar o estado no App
-                        const orgsRef = collection(db, 'artifacts', appId, 'public', 'data', 'orgs');
-                        // Em um app real, faríamos query no banco, aqui usamos a memória do listener do App pai ou buscamos agora?
-                        // Vamos simplificar e buscar apenas o usuário e passar para o pai que carrega o resto
                         onLogin(existingUser);
                     } else {
-                        // Register
                         if (existingUser) throw new Error("Email já cadastrado.");
                         
                         let orgId, role;
                         if (formData.inviteCode) {
-                            // Buscar Org pelo código
-                            // Como não temos a lista de orgs aqui, vamos buscar no banco
-                            // Nota: Isso é uma query simplificada. Em produção use query()
-                            // Vamos assumir que criamos uma nova ou entramos em uma
-                            // Para MVP, vamos criar
                              if (!formData.orgName && !formData.inviteCode) throw new Error("Preencha os dados da empresa.");
-                             
-                             // Lógica simplificada: Se tem invite, busca (mock), se não cria
-                             if (formData.inviteCode) {
-                                 // Aqui precisaríamos buscar a org. Vamos simular sucesso se tiver código
-                                 // Na prática real, faríamos uma query na collection 'orgs'
-                                 const orgsRef = collection(db, 'artifacts', appId, 'public', 'data', 'orgs');
-                                 // Para simplificar neste ambiente restrito, vamos assumir que o usuário sabe o ID se usar invite
-                                 // Ou criar nova
-                             }
-                             
-                             // Criar Nova Org
+                             // Em um caso real, validaria o código no banco
+                             // Aqui, vamos assumir criação se não achar ou mockar
                              const orgsRef = collection(db, 'artifacts', appId, 'public', 'data', 'orgs');
                              const newOrg = { 
                                  name: formData.orgName || "Nova Empresa", 
@@ -218,7 +195,7 @@
                         const newUser = {
                             name: formData.name,
                             email: formData.email,
-                            password: formData.password, // Em produção nunca salve senha pura!
+                            password: formData.password,
                             orgId,
                             role,
                             avatar: formData.name.charAt(0).toUpperCase()
@@ -255,21 +232,16 @@
                             <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Senha</label><input required type="password" className="w-full p-2.5 rounded-lg border dark:bg-gray-800 dark:border-gray-700 dark:text-white" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} placeholder="******" /></div>
                             <button type="submit" disabled={loading} className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-lg shadow-blue-500/30 transition disabled:opacity-50">{loading ? 'Carregando...' : (isLogin ? 'Entrar' : 'Cadastrar')}</button>
                         </form>
-                        <div className="mt-6 text-center text-sm text-gray-500">{isLogin ? 'Não tem conta?' : 'Já tem conta?'}<button onClick={() => setIsLogin(!isLogin)} className="ml-1 text-blue-600 font-bold hover:underline">{isLogin ? 'Criar agora' : 'Fazer login'}</button></div>
+                        <div className="mt-6 text-center text-sm text-gray-500">{isLogin ? 'Não tem conta?' : 'Já tem conta?'} <button onClick={() => setIsLogin(!isLogin)} className="ml-1 text-blue-600 font-bold hover:underline">{isLogin ? 'Criar agora' : 'Fazer login'}</button></div>
                     </div>
                 </div>
             );
         };
 
-        // --- COMPONENTES DO SISTEMA ---
-        // (Settings, Chat, File, Kanban, Dashboard, AI mantidos identicos visualmente, mas com lógica injetada via props)
-        
-        const SettingsModule = ({ user, org, team, actions, isDark }) => { /* ...Código anterior mantido, apenas lógica visual... */ 
+        const SettingsModule = ({ user, org, team, actions }) => {
             const [activeTab, setActiveTab] = useState('profile');
             const [name, setName] = useState(user.name);
             const [newMemberId, setNewMemberId] = useState('');
-            
-            // Simplificado para foco na lógica de integração
             const tabs = [{ id: 'profile', label: 'Perfil', icon: 'user' }, { id: 'org', label: 'Organização', icon: 'building' }];
 
             return (
@@ -286,7 +258,7 @@
                                     <label className="text-xs uppercase font-bold text-gray-500">Seu ID (Para Convites)</label>
                                     <div className="flex items-center gap-2 mt-1">
                                         <code className="bg-white dark:bg-gray-900 p-2 rounded border dark:border-gray-600 font-mono text-lg dark:text-white select-all">{user.id}</code>
-                                        <button onClick={() => {navigator.clipboard.writeText(user.id); actions.addToast("Copiado!", "success")}} className="text-blue-600 text-sm">Copiar</button>
+                                        <button onClick={() => {navigator.clipboard.writeText(user.id); actions.addToast("Copiado!", "success")}} className="text-blue-600 text-sm hover:underline">Copiar</button>
                                     </div>
                                 </div>
                                 <div><label className="block text-sm mb-1 dark:text-white">Nome</label><input className="w-full p-2 border rounded dark:bg-gray-800 dark:border-gray-700 dark:text-white" value={name} onChange={e => setName(e.target.value)} /></div>
@@ -323,62 +295,285 @@
             );
         };
 
+        class NexusNeuralEngine {
+            constructor(context) { this.context = context; }
+            normalize(text) { return text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""); }
+            async process(input) {
+                const text = this.normalize(input);
+                const { tasks, users, setView, setTasks, toggleTheme, isDark, addToast, saveTask } = this.context;
+                await new Promise(r => setTimeout(r, 800));
+                if (text.match(/ir para|abrir|ver|dashboard|kanban|chat|arquivos|configuracoes/)) {
+                    if (text.includes("kanban") || text.includes("quadro")) { setView('kanban'); return { text: "Abrindo o Quadro Kanban.", action: 'nav' }; }
+                    if (text.includes("dashboard")) { setView('dashboard'); return { text: "Voltando ao Dashboard.", action: 'nav' }; }
+                    if (text.includes("chat")) { setView('chat'); return { text: "Abrindo Chat.", action: 'nav' }; }
+                    if (text.includes("arquivos")) { setView('files'); return { text: "Abrindo Arquivos.", action: 'nav' }; }
+                    if (text.includes("config")) { setView('settings'); return { text: "Acessando Configurações.", action: 'nav' }; }
+                }
+                if (text.includes("modo escuro") || text.includes("tema escuro")) { if (!isDark) toggleTheme(); return { text: "Modo escuro ativado.", action: 'theme' }; }
+                if (text.includes("modo claro") || text.includes("tema claro")) { if (isDark) toggleTheme(); return { text: "Modo claro ativado.", action: 'theme' }; }
+                if (text.includes("criar") || text.includes("nova tarefa")) {
+                    const nameMatch = input.match(/(?:tarefa|chamada|nome) (.*?)(?: para| com prioridade|$)/i);
+                    const title = nameMatch ? nameMatch[1] : "Nova Tarefa IA";
+                    saveTask({ title, description: "Criada via Nexus AI", status: "todo", priority: "medium", assignee: users[0]?.id });
+                    return { text: `Criei a tarefa: "${title}".`, action: 'create' };
+                }
+                return { text: "Comando não reconhecido. Tente 'Criar tarefa [nome]', 'Ir para Kanban' ou 'Resumo'.", action: 'confused' };
+            }
+        }
+
+        const FileModule = ({ files, onUpload, onDelete, userRole }) => {
+            const fileInputRef = useRef(null);
+            const [searchTerm, setSearchTerm] = useState("");
+            const handleFileChange = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (event) => onUpload({ id: Date.now(), name: file.name, size: file.size, type: file.type, data: event.target.result, date: new Date().toISOString(), uploader: "Você" });
+                reader.readAsDataURL(file);
+            };
+            const filteredFiles = files.filter(f => f.name.toLowerCase().includes(searchTerm.toLowerCase()));
+            return (
+                <div className="flex flex-col h-full bg-white dark:bg-dark-card rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden animate-fade-in">
+                    <div className="p-6 border-b dark:border-gray-700 flex justify-between items-center">
+                        <h2 className="text-xl font-bold dark:text-white flex gap-2"><Icon name="hard-drive" className="text-blue-500"/> Arquivos ({files.length})</h2>
+                        <div className="flex gap-2">
+                            <input className="bg-gray-100 dark:bg-gray-800 p-2 rounded text-sm dark:text-white" placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                            <input type="file" className="hidden" ref={fileInputRef} onChange={handleFileChange} />
+                            {userRole !== 'viewer' && <button onClick={() => fileInputRef.current.click()} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex gap-2 hover:bg-blue-700"><Icon name="upload-cloud" size={18}/> Upload</button>}
+                        </div>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-6 grid grid-cols-2 md:grid-cols-4 gap-4 content-start">
+                        {filteredFiles.map(file => (
+                            <div key={file.id} className="group bg-gray-50 dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-4 hover:shadow-lg relative">
+                                <div className="flex justify-between mb-2"><Icon name={file.type.includes('image') ? 'image' : 'file-text'} className="text-blue-500"/><div className="opacity-0 group-hover:opacity-100 flex gap-1"><a href={file.data} download={file.name} className="p-1 hover:bg-gray-200 rounded"><Icon name="download" size={14}/></a>{userRole === 'admin' && <button onClick={() => onDelete(file.id)} className="p-1 hover:bg-red-100 text-red-500 rounded"><Icon name="trash-2" size={14}/></button>}</div></div>
+                                <h3 className="font-bold text-sm truncate dark:text-white" title={file.name}>{file.name}</h3>
+                                <p className="text-xs text-gray-500">{formatBytes(file.size)}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
+        const ChatModule = ({ currentUser, users, messages, onSendMessage }) => {
+            const [activeChannelId, setActiveChannelId] = useState('general');
+            const [inputText, setInputText] = useState("");
+            const [searchTerm, setSearchTerm] = useState("");
+            const [isTyping, setIsTyping] = useState(false);
+            const scrollRef = useRef(null);
+            const fileInputRef = useRef(null);
+            const channels = [{ id: 'general', name: 'Geral', type: 'public' }, { id: 'projects', name: 'Projetos', type: 'public' }, { id: 'announcements', name: 'Anúncios', type: 'public' }];
+            const orgUsers = users.filter(u => u.orgId === currentUser.orgId && u.id !== currentUser.id);
+            useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [messages, activeChannelId, isTyping]);
+            const currentMessages = messages.filter(m => m.channelId === activeChannelId || (m.type === 'dm' && ((m.senderId === currentUser.id && m.receiverId === activeChannelId) || (m.senderId === activeChannelId && m.receiverId === currentUser.id))));
+            
+            const handleSend = (textOverride = null, attachmentOverride = null) => {
+                const textToSend = textOverride !== null ? textOverride : inputText;
+                if (!textToSend.trim() && !attachmentOverride) return;
+                const isDM = !channels.find(c => c.id === activeChannelId);
+                onSendMessage({ text: textToSend, channelId: isDM ? null : activeChannelId, receiverId: isDM ? activeChannelId : null, type: isDM ? 'dm' : 'public', attachment: attachmentOverride });
+                setInputText("");
+                if(Math.random() > 0.7) { setIsTyping(true); setTimeout(() => setIsTyping(false), 2000); }
+            };
+
+            const handleFileSelect = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const attachmentData = { name: file.name, type: file.type, size: file.size, data: event.target.result };
+                    handleSend("Enviou um arquivo", attachmentData);
+                };
+                reader.readAsDataURL(file);
+            };
+
+            const getChannelName = (id) => {
+                const ch = channels.find(c => c.id === id);
+                if (ch) return `#${ch.name}`;
+                const usr = users.find(u => u.id === parseInt(id) || u.id === id);
+                return usr ? usr.name : "Chat";
+            };
+            return (
+                <div className="flex h-full bg-white dark:bg-dark-card rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                    <div className="w-64 bg-gray-50 dark:bg-gray-900 border-r dark:border-gray-800 flex flex-col hidden md:flex">
+                        <div className="p-4 border-b dark:border-gray-800"><div className="relative"><Icon name="search" size={16} className="absolute left-3 top-2.5 text-gray-400"/><input className="w-full bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-white" placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div></div>
+                        <div className="flex-1 overflow-y-auto p-3 space-y-6">
+                            <div><h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-2">Canais</h3><div className="space-y-1">{channels.map(ch => <button key={ch.id} onClick={() => setActiveChannelId(ch.id)} className={`w-full flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeChannelId === ch.id ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`}><Icon name="hash" size={14} className="mr-2 opacity-70"/> {ch.name}</button>)}</div></div>
+                            <div><h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-2">Mensagens Diretas</h3><div className="space-y-1">{orgUsers.filter(u => u.name.toLowerCase().includes(searchTerm.toLowerCase())).map(user => <button key={user.id} onClick={() => setActiveChannelId(user.id)} className={`w-full flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeChannelId === user.id ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`}><span className="text-base mr-2">{user.avatar}</span> {user.name}</button>)}</div></div>
+                        </div>
+                    </div>
+                    <div className="flex-1 flex flex-col min-w-0">
+                        <div className="h-16 border-b dark:border-gray-800 flex items-center justify-between px-6 bg-white dark:bg-dark-card"><div><h3 className="font-bold text-gray-800 dark:text-white">{getChannelName(activeChannelId)}</h3><p className="text-xs text-gray-500 flex items-center gap-1"><span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span> Online</p></div></div>
+                        <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-gray-50 dark:bg-dark-bg/50" ref={scrollRef}>
+                            {currentMessages.map((msg, idx) => {
+                                const isMe = msg.senderId === currentUser.id;
+                                const sender = users.find(u => u.id === msg.senderId);
+                                return (<div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'} group`}><div className={`flex max-w-[80%] gap-3 ${isMe ? 'flex-row-reverse' : ''}`}><div className="w-8 h-8 flex-shrink-0">{!isMe && <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-sm border-2 border-white dark:border-gray-800 shadow">{sender?.avatar}</div>}</div><div>{!isMe && <div className="text-xs text-gray-500 mb-1 ml-1">{sender?.name}</div>}
+                                <div className={`p-3 rounded-2xl shadow-sm text-sm ${isMe ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white dark:bg-gray-800 dark:text-gray-100 rounded-tl-none border dark:border-gray-700'}`}>
+                                    {msg.text}
+                                    {msg.attachment && (
+                                        <div className="mt-2 pt-2 border-t border-white/20">
+                                            {msg.attachment.type.includes('image') ? (<div className="rounded-lg overflow-hidden mb-1"><img src={msg.attachment.data} alt="anexo" className="max-w-full h-auto max-h-60 object-cover"/></div>) : (<div className="flex items-center gap-2 mb-1 p-2 bg-black/10 rounded"><Icon name="file" size={20}/><span className="truncate max-w-[150px]">{msg.attachment.name}</span></div>)}
+                                            <a href={msg.attachment.data} download={msg.attachment.name} className="text-xs flex items-center gap-1 underline hover:text-blue-200"><Icon name="download" size={12}/> Baixar {formatBytes(msg.attachment.size)}</a>
+                                        </div>
+                                    )}
+                                    <div className={`text-[10px] mt-1 text-right opacity-70 ${isMe ? 'text-blue-100' : 'text-gray-400'}`}>{new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                                </div></div></div></div>);
+                            })}
+                            {isTyping && <div className="flex justify-start gap-3"><div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-sm opacity-50">...</div><div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-2xl rounded-tl-none flex items-center gap-1"><span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></span><span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-100"></span><span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-200"></span></div></div>}
+                        </div>
+                        <div className="p-4 bg-white dark:bg-dark-card border-t dark:border-gray-800">
+                            <div className="flex items-end gap-2 bg-gray-100 dark:bg-gray-800 p-2 rounded-xl border border-transparent focus-within:border-blue-500 focus-within:bg-white dark:focus-within:bg-gray-900 transition-all">
+                                <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileSelect} />
+                                <button onClick={() => fileInputRef.current.click()} className="p-2 text-gray-400 hover:text-blue-500 transition-colors rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700"><Icon name="paperclip" size={20}/></button>
+                                <textarea value={inputText} onChange={e => setInputText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }} className="flex-1 bg-transparent border-0 focus:ring-0 text-gray-800 dark:text-white resize-none max-h-32 py-2 text-sm" placeholder="Enviar mensagem..." rows={1} />
+                                <button onClick={() => handleSend()} disabled={!inputText.trim()} className={`p-2 rounded-lg transition-all ${inputText.trim() ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-200 dark:bg-gray-700 text-gray-400 cursor-not-allowed'}`}><Icon name="send" size={18} className={inputText.trim() ? "ml-0.5" : ""}/></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const TaskModal = ({ isOpen, onClose, task, users, columns, onSave, onDelete, userRole }) => {
+            const [formData, setFormData] = useState({ title: "", description: "", priority: "medium", assignee: users[0]?.id, status: columns[0]?.id });
+            useEffect(() => { if (isOpen) setFormData(task || { title: "", description: "", priority: "medium", assignee: users[0]?.id, status: columns[0]?.id }); }, [isOpen, task]);
+            if (!isOpen) return null;
+            return (
+                <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay p-4">
+                    <div className="bg-white dark:bg-dark-card rounded-xl shadow-2xl w-full max-w-lg animate-fade-in flex flex-col max-h-[90vh]">
+                        <div className="flex justify-between items-center p-5 border-b dark:border-gray-700">
+                            <h3 className="font-bold text-xl text-gray-800 dark:text-gray-100">{task ? "Editar Tarefa" : "Nova Tarefa"}</h3>
+                            <button onClick={onClose} className="text-gray-400 hover:text-red-500 transition"><Icon name="x" size={24} /></button>
+                        </div>
+                        <div className="p-6 overflow-y-auto space-y-4">
+                            <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Título</label><input className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-gray-900 dark:text-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 focus:outline-none transition" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="Ex: Atualizar Documentação" disabled={userRole === 'viewer'} autoFocus /></div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Prioridade</label><select className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-gray-900 dark:text-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 outline-none" value={formData.priority} onChange={e => setFormData({...formData, priority: e.target.value})} disabled={userRole === 'viewer'}><option value="low">Baixa</option><option value="medium">Média</option><option value="high">Alta</option></select></div>
+                                <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Responsável</label><select className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-gray-900 dark:text-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 outline-none" value={formData.assignee} onChange={e => setFormData({...formData, assignee: parseInt(e.target.value)})} disabled={userRole === 'viewer'}>{users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</select></div>
+                            </div>
+                            <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Coluna (Status)</label><select className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-gray-900 dark:text-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 outline-none" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} disabled={userRole === 'viewer'}>{columns.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}</select></div>
+                            <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Descrição</label><textarea className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-gray-900 dark:text-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 outline-none h-32 resize-none" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Detalhes adicionais..." disabled={userRole === 'viewer'} /></div>
+                        </div>
+                        <div className="p-5 border-t dark:border-gray-700 flex items-center justify-between bg-gray-50 dark:bg-gray-800/50 rounded-b-xl">
+                            <div>{task && userRole !== 'viewer' && (<button onClick={() => { if(confirm("Excluir esta tarefa?")) onDelete(task.id); }} className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg transition flex items-center gap-2 text-sm font-medium"><Icon name="trash-2" size={16} /> Excluir</button>)}</div>
+                            <div className="flex gap-3"><button onClick={onClose} className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition text-sm font-medium">Cancelar</button>{userRole !== 'viewer' && (<button onClick={() => onSave({ ...task, ...formData })} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-lg shadow-blue-500/30 transition transform active:scale-95 text-sm">Salvar</button>)}</div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const KanbanBoard = ({ tasks, users, columns, actions, userRole }) => {
+            const [editingColId, setEditingColId] = useState(null);
+            const [editColTitle, setEditColTitle] = useState("");
+            const [editColColor, setEditColColor] = useState("");
+            const handleDrop = (e, status) => { const id = e.dataTransfer.getData("id"); if (id) actions.moveTask(parseInt(id), status); };
+            const startEditCol = (col) => { if(userRole==='admin'){ setEditingColId(col.id); setEditColTitle(col.title); setEditColColor(col.color || COLUMN_COLORS[0]);}};
+            const saveColEdit = (colId) => {}; // No-op, use buttons
+            const commitColEdit = (colId) => { if (editColTitle.trim()) { actions.updateColumn(colId, { title: editColTitle, color: editColColor }); } setEditingColId(null); };
+
+            return (
+                <div className="flex h-full overflow-x-auto space-x-4 pb-2 items-start">
+                    {columns.map(col => (
+                        <div key={col.id} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, col.id)} className={`flex-shrink-0 w-80 ${col.color || 'bg-gray-100 dark:bg-gray-800'} rounded-xl p-3 flex flex-col max-h-full transition-all group/col`}>
+                            <div className="mb-3 px-1">
+                                {editingColId === col.id ? (
+                                    <div className="bg-white dark:bg-gray-700 p-2 rounded shadow-sm border dark:border-gray-600"><input autoFocus className="w-full text-sm font-bold border rounded px-2 py-1 mb-2 dark:bg-gray-800 dark:text-white" value={editColTitle} onChange={(e) => setEditColTitle(e.target.value)} /><div className="flex flex-wrap gap-1 mb-2">{COLUMN_COLORS.map(c => (<button key={c} onClick={() => setEditColColor(c)} className={`w-4 h-4 rounded-full border border-gray-300 ${c.split(' ')[0]} ${editColColor === c ? 'ring-2 ring-blue-500' : ''}`}/>))}</div><div className="flex gap-2 justify-end"><button onClick={() => setEditingColId(null)} className="text-xs text-gray-500 hover:bg-gray-100 p-1 rounded">Cancelar</button><button onClick={() => commitColEdit(col.id)} className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700">Salvar</button></div></div>
+                                ) : (
+                                    <div className="flex justify-between items-center min-h-[32px]"><div className={`flex items-center gap-2 flex-1 ${userRole==='admin'?'cursor-pointer':''}`} onClick={() => startEditCol(col)}><h3 className="font-bold text-gray-700 dark:text-gray-200 truncate">{col.title}</h3><span className="bg-white/50 dark:bg-black/20 text-xs font-mono px-2 py-0.5 rounded text-gray-600 dark:text-gray-400">{tasks.filter(t => t.status === col.id).length}</span></div><div className="flex items-center gap-1 opacity-0 group-hover/col:opacity-100 transition-opacity">{userRole === 'admin' && <button onClick={() => actions.deleteColumn(col.id)} className="text-gray-400 hover:text-red-500"><Icon name="trash-2" size={14}/></button>}</div></div>
+                                )}
+                            </div>
+                            <div className="flex-1 overflow-y-auto space-y-3 pb-2 min-h-[50px]">
+                                {tasks.filter(t => t.status === col.id).map(task => {
+                                    const assignee = users.find(u => u.id === task.assignee);
+                                    return (
+                                        <div key={task.id} draggable={userRole!=='viewer'} onDragStart={(e) => e.dataTransfer.setData("id", task.id)} onClick={() => actions.openTaskModal(task)} className="bg-white dark:bg-dark-card p-4 rounded-lg shadow-sm cursor-pointer hover:shadow-md border border-transparent dark:border-gray-700 group hover:border-blue-300 dark:hover:border-blue-500 transition-all">
+                                            <div className="flex justify-between items-start mb-2"><span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-md ${task.priority==='high'?'bg-red-100 text-red-600':task.priority==='low'?'bg-blue-100 text-blue-600':'bg-yellow-100 text-yellow-700'}`}>{task.priority==='high'?'Alta':task.priority==='low'?'Baixa':'Média'}</span>{userRole!=='viewer'&&<Icon name="edit-2" size={14} className="text-gray-300 hover:text-blue-500 opacity-0 group-hover:opacity-100"/>}</div>
+                                            <p className="font-medium text-gray-800 dark:text-gray-100 text-sm leading-snug mb-1">{task.title}</p>
+                                            <div className="flex justify-between items-center text-xs text-gray-500 mt-2 pt-2 border-t dark:border-gray-700"><span className="flex items-center gap-1"><Icon name="clock" size={12}/> {Math.floor(task.spent||0/60)}h</span>{assignee && <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs shadow-sm">{assignee.avatar}</div>}</div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    ))}
+                    {userRole !== 'viewer' && <button onClick={actions.addColumn} className="w-12 flex-shrink-0 bg-gray-200/50 dark:bg-gray-800/50 rounded-xl hover:bg-gray-200 flex items-center justify-center text-gray-400 h-[100px] border-2 border-dashed border-gray-300 dark:border-gray-700"><Icon name="plus" size={24}/></button>}
+                </div>
+            );
+        };
+
+        const Dashboard = ({ tasks, users, columns, activities, orgName, inviteCode, userRole }) => {
+            return (
+                <div className="space-y-6 max-w-6xl mx-auto animate-fade-in pb-10">
+                    <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl p-8 text-white shadow-lg flex justify-between items-center">
+                        <div><h2 className="text-3xl font-bold mb-1">{orgName}</h2><p className="opacity-90">Dashboard Corporativo</p></div>
+                        {userRole === 'admin' && <div className="bg-white/20 p-3 rounded-lg backdrop-blur-sm text-center"><p className="text-xs uppercase font-bold tracking-wider opacity-80">Código de Convite</p><p className="text-2xl font-mono font-bold tracking-widest">{inviteCode}</p></div>}
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="bg-white dark:bg-dark-card p-5 rounded-xl shadow-sm border-l-4 border-blue-600"><div className="text-gray-500 text-xs font-bold uppercase">Total</div><div className="text-3xl font-bold dark:text-white">{tasks.length}</div></div>
+                        {columns.map(c => <div key={c.id} className="bg-white dark:bg-dark-card p-5 rounded-xl shadow-sm border-l-4 border-gray-300"><div className="text-gray-500 text-xs font-bold uppercase truncate">{c.title}</div><div className="text-3xl font-bold dark:text-white">{tasks.filter(t => t.status === c.id).length}</div></div>)}
+                    </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="bg-white dark:bg-dark-card rounded-xl shadow-sm p-6 border dark:border-gray-700"><h3 className="font-bold dark:text-white mb-4 flex items-center gap-2"><Icon name="users" className="text-indigo-500"/> Equipe ({users.length})</h3><div className="space-y-3">{users.map(u => <div key={u.id} className="flex justify-between items-center text-sm dark:text-gray-300"><span>{u.name} <span className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded ml-1">{u.role}</span></span><span className="font-mono text-xs">{tasks.filter(t => t.assignee === u.id).length} tarefas</span></div>)}</div></div>
+                        <div className="bg-white dark:bg-dark-card rounded-xl shadow-sm p-6 border dark:border-gray-700 h-64 overflow-y-auto"><h3 className="font-bold dark:text-white mb-4 flex items-center gap-2"><Icon name="activity" className="text-green-500"/> Atividades</h3><div className="space-y-3 text-sm text-gray-600 dark:text-gray-400">{activities.map(a => <div key={a.id}><span className="font-bold text-indigo-500">{a.user}</span> {a.text}</div>)}</div></div>
+                    </div>
+                </div>
+            );
+        };
+
+        const AIAssistant = ({ context }) => {
+            const [messages, setMessages] = useState([{ sender: 'ai', text: 'Olá! Sou a Nexus AI. Posso criar tarefas, gerar relatórios ou mudar o tema. Como ajudo?' }]);
+            const [input, setInput] = useState("");
+            const [isTyping, setIsTyping] = useState(false);
+            const msgsRef = useRef(null);
+            const engine = useMemo(() => new NexusNeuralEngine(context), [context.tasks, context.isDark, context.view]);
+            useEffect(() => msgsRef.current?.scrollIntoView({ behavior: "smooth" }), [messages, isTyping]);
+            const handleSend = async () => { if (!input.trim()) return; const txt = input; setMessages(p => [...p, { sender: 'user', text: txt }]); setInput(""); setIsTyping(true); const res = await engine.process(txt); setIsTyping(false); setMessages(p => [...p, { sender: 'ai', text: res.text }]); };
+            return (
+                <div className="flex flex-col h-full bg-white dark:bg-dark-card rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                    <div className="p-4 bg-indigo-600 text-white font-bold flex items-center gap-2"><Icon name="sparkles"/> Nexus AI</div>
+                    <div className="flex-1 p-4 space-y-4 overflow-y-auto">{messages.map((m, i) => (<div key={i} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[85%] rounded-2xl p-3 text-sm shadow-sm ${m.sender === 'user' ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-gray-700 dark:text-gray-200 border dark:border-gray-600'}`}>{m.text}</div></div>))} {isTyping && <div className="text-gray-400 text-xs animate-pulse ml-2">Pensando...</div>} <div ref={msgsRef} /></div>
+                    <div className="p-3 border-t dark:border-gray-700 bg-white dark:bg-dark-card flex gap-2"><input className="flex-1 bg-gray-100 dark:bg-gray-800 rounded-full px-4 py-2 outline-none dark:text-white" value={input} onChange={e => setInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleSend()} placeholder="Digite um comando..." /><button onClick={handleSend}><Icon name="send" className="text-indigo-600"/></button></div>
+                </div>
+            );
+        };
+
         // --- APP PRINCIPAL (CONECTADO AO FIREBASE) ---
         const App = () => {
             const { db, appId, isReady } = useFirebase();
-            const [user, setUser] = useState(null); // Em memória após login
+            const [user, setUser] = useState(null);
             const [isDark, setIsDark] = useState(false);
             const [view, setView] = useState('dashboard');
             
-            // Dados (Sincronizados com Firebase)
             const [tasks, setTasks] = useState([]);
             const [columns, setColumns] = useState([]);
             const [users, setUsers] = useState([]);
             const [messages, setMessages] = useState([]);
             const [files, setFiles] = useState([]);
             const [activities, setActivities] = useState([]);
-            const [orgs, setOrgs] = useState([]); // Para lookup de login
+            const [orgs, setOrgs] = useState([]);
             
             const [toasts, setToasts] = useState([]);
             const [modalConfig, setModalConfig] = useState({ isOpen: false, task: null });
 
-            // Listeners do Firebase
             useEffect(() => {
                 if (!isReady || !db) return;
-
-                const { collection, onSnapshot, query, where } = window.Firebase;
-                
-                // Carregar TUDO (Filtragem de segurança deve ser feita no backend em apps reais)
-                // Aqui carregamos tudo e filtramos no render por orgId para simular
-                const unsubUsers = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'users'), (snap) => {
-                    const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                    setUsers(data);
-                    // Atualiza usuário logado se seus dados mudarem
-                    if (user) {
-                        const updatedMe = data.find(u => u.id === user.id);
-                        if (updatedMe) setUser(updatedMe);
-                    }
-                });
-
+                const { collection, onSnapshot } = window.Firebase;
+                const unsubUsers = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'users'), (snap) => { const data = snap.docs.map(d => ({ id: d.id, ...d.data() })); setUsers(data); if (user) { const updatedMe = data.find(u => u.id === user.id); if (updatedMe) setUser(updatedMe); } });
                 const unsubOrgs = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'orgs'), (snap) => setOrgs(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
                 const unsubTasks = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'tasks'), (snap) => setTasks(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
                 const unsubCols = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'columns'), (snap) => setColumns(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
                 const unsubMsgs = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'messages'), (snap) => setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
                 const unsubFiles = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'files'), (snap) => setFiles(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
                 const unsubActs = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'activities'), (snap) => setActivities(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+                return () => { unsubUsers(); unsubOrgs(); unsubTasks(); unsubCols(); unsubMsgs(); unsubFiles(); unsubActs(); };
+            }, [isReady, db, appId]);
 
-                return () => {
-                    unsubUsers(); unsubOrgs(); unsubTasks(); unsubCols(); unsubMsgs(); unsubFiles(); unsubActs();
-                };
-            }, [isReady, db, appId]); // Remove user from dep to avoid re-subscribing on user update
-
-            useEffect(() => { 
-                document.documentElement.classList.toggle('dark', isDark); 
-            }, [isDark]);
+            useEffect(() => { document.documentElement.classList.toggle('dark', isDark); }, [isDark]);
 
             const addToast = (msg, type = 'info') => setToasts(p => [...p, { id: Date.now(), message: msg, type }]);
 
-            // Filtros de Organização
             const myOrg = user ? orgs.find(o => o.id === user.orgId) : null;
             const myTasks = tasks.filter(t => t.orgId === user?.orgId);
             const myColumns = columns.filter(c => c.orgId === user?.orgId);
@@ -387,88 +582,29 @@
             const myFiles = files.filter(f => f.orgId === user?.orgId);
             const myActivities = activities.filter(a => a.orgId === user?.orgId).sort((a,b) => new Date(b.time) - new Date(a.time));
 
-            // Ações Firebase
             const fbActions = {
-                add: async (coll, data) => {
-                    if (!user) return;
-                    const { collection, addDoc } = window.Firebase;
-                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', coll), { ...data, orgId: user.orgId });
-                },
-                update: async (coll, id, data) => {
-                    if (!user) return;
-                    const { doc, updateDoc } = window.Firebase;
-                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', coll, id), data);
-                },
-                delete: async (coll, id) => {
-                    if (!user) return;
-                    const { doc, deleteDoc } = window.Firebase;
-                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', coll, id));
-                },
-                log: (text) => {
-                    if (!user) return;
-                    const { collection, addDoc } = window.Firebase;
-                    addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'activities'), {
-                        text, user: user.name, time: new Date().toISOString(), orgId: user.orgId
-                    });
-                }
+                add: async (coll, data) => { if (!user) return; const { collection, addDoc } = window.Firebase; await addDoc(collection(db, 'artifacts', appId, 'public', 'data', coll), { ...data, orgId: user.orgId }); },
+                update: async (coll, id, data) => { if (!user) return; const { doc, updateDoc } = window.Firebase; await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', coll, id), data); },
+                delete: async (coll, id) => { if (!user) return; const { doc, deleteDoc } = window.Firebase; await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', coll, id)); },
+                log: (text) => { if (!user) return; const { collection, addDoc } = window.Firebase; addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'activities'), { text, user: user.name, time: new Date().toISOString(), orgId: user.orgId }); }
             };
 
             const actions = {
                 toggleTheme: () => setIsDark(!isDark),
                 openTaskModal: (task = null) => setModalConfig({ isOpen: true, task }),
                 addToast,
-                saveTask: (taskData) => {
-                    if (user.role === 'viewer') return addToast("Sem permissão", "error");
-                    if (taskData.id) {
-                        fbActions.update('tasks', taskData.id, taskData);
-                        fbActions.log(`editou a tarefa "${taskData.title}"`);
-                    } else {
-                        fbActions.add('tasks', { ...taskData, spent: 0 });
-                        fbActions.log(`criou a tarefa "${taskData.title}"`);
-                    }
-                    setModalConfig({ isOpen: false, task: null });
-                    addToast("Salvo!", "success");
-                },
-                deleteTask: (id) => {
-                    if (user.role === 'viewer') return;
-                    fbActions.delete('tasks', id);
-                    setModalConfig({ isOpen: false, task: null });
-                    fbActions.log("deletou uma tarefa");
-                },
+                saveTask: (taskData) => { if (user.role === 'viewer') return addToast("Sem permissão", "error"); if (taskData.id) { fbActions.update('tasks', taskData.id, taskData); fbActions.log(`editou a tarefa "${taskData.title}"`); } else { fbActions.add('tasks', { ...taskData, spent: 0 }); fbActions.log(`criou a tarefa "${taskData.title}"`); } setModalConfig({ isOpen: false, task: null }); addToast("Salvo!", "success"); },
+                deleteTask: (id) => { if (user.role === 'viewer') return; fbActions.delete('tasks', id); setModalConfig({ isOpen: false, task: null }); fbActions.log("deletou uma tarefa"); },
                 moveTask: (id, status) => { if (user.role !== 'viewer') fbActions.update('tasks', id, { status }); },
-                addColumn: () => {
-                    if (user.role !== 'admin') return addToast("Apenas admins", "error");
-                    fbActions.add('columns', { title: "Nova Coluna", color: 'bg-gray-100 dark:bg-gray-800' });
-                    fbActions.log("criou uma coluna");
-                },
+                addColumn: () => { if (user.role !== 'admin') return addToast("Apenas admins", "error"); const nextColor = COLUMN_COLORS[myColumns.length % COLUMN_COLORS.length]; fbActions.add('columns', { title: "Nova Coluna", color: nextColor }); fbActions.log("criou uma coluna"); },
                 updateColumn: (id, data) => fbActions.update('columns', id, data),
-                deleteColumn: (id) => {
-                    if (user.role !== 'admin') return;
-                    if (confirm("Excluir?")) { fbActions.delete('columns', id); fbActions.log("deletou uma coluna"); }
-                },
-                sendMessage: (payload) => {
-                    fbActions.add('messages', { ...payload, senderId: user.id, timestamp: Date.now() });
-                },
-                uploadFile: (file) => {
-                    fbActions.add('files', file);
-                    fbActions.log(`enviou arquivo ${file.name}`);
-                },
-                deleteFile: (id) => {
-                    if (confirm("Excluir?")) fbActions.delete('files', id);
-                },
+                deleteColumn: (id) => { if (user.role !== 'admin') return; if (confirm("Excluir?")) { fbActions.delete('columns', id); fbActions.log("deletou uma coluna"); } },
+                sendMessage: (payload) => { fbActions.add('messages', { ...payload, senderId: user.id, timestamp: Date.now() }); },
+                uploadFile: (file) => { fbActions.add('files', file); fbActions.log(`enviou arquivo ${file.name}`); },
+                deleteFile: (id) => { if (confirm("Excluir?")) fbActions.delete('files', id); },
                 logout: () => setUser(null),
                 updateUser: (data) => fbActions.update('users', user.id, data),
-                addMember: async (targetId) => {
-                    // Logic to find user by ID in the global users list and update orgId
-                    const target = users.find(u => u.id === targetId);
-                    if (!target) return addToast("Usuário não encontrado", "error");
-                    if (target.orgId === user.orgId) return addToast("Já é membro", "error");
-                    
-                    // Update target user
-                    await fbActions.update('users', targetId, { orgId: user.orgId, role: 'member' });
-                    addToast("Membro adicionado!", "success");
-                    fbActions.log(`adicionou ${target.name} à equipe`);
-                }
+                addMember: async (targetId) => { const target = users.find(u => u.id === targetId); if (!target) return addToast("Usuário não encontrado", "error"); if (target.orgId === user.orgId) return addToast("Já é membro", "error"); await fbActions.update('users', targetId, { orgId: user.orgId, role: 'member' }); addToast("Membro adicionado!", "success"); fbActions.log(`adicionou ${target.name} à equipe`); }
             };
 
             const aiContext = { tasks: myTasks, users: myTeam, columns: myColumns, isDark, view, ...actions };
@@ -479,8 +615,6 @@
             return (
                 <div className="flex h-screen overflow-hidden bg-gray-50 dark:bg-dark-bg text-gray-900 dark:text-dark-text font-sans">
                     <div className="fixed top-0 right-0 p-4 z-[9999] pointer-events-none">{toasts.map(t => <div key={t.id} className="pointer-events-auto mb-2"><Toast message={t.message} type={t.type} onClose={() => setToasts(p => p.filter(x => x.id !== t.id))} /></div>)}</div>
-                    
-                    {/* Sidebar */}
                     <aside className="w-16 lg:w-64 bg-white dark:bg-dark-card border-r dark:border-gray-800 flex flex-col z-20 shadow-xl transition-all">
                         <div className="h-16 flex items-center justify-center lg:justify-start lg:px-6 border-b dark:border-gray-800"><div className="bg-blue-600 p-2 rounded-lg text-white"><Icon name="cloud" /></div><span className="ml-3 font-bold text-lg hidden lg:block">Nexus Cloud</span></div>
                         <div className="p-4 border-b dark:border-gray-800 hidden lg:block"><div className="text-xs font-bold text-gray-400 uppercase">Organização</div><div className="font-bold truncate">{myOrg?.name || 'Minha Empresa'}</div><div className="text-xs text-blue-500">{user.role}</div></div>
@@ -491,15 +625,12 @@
                         </nav>
                         <div className="p-4 border-t dark:border-gray-800 flex flex-col gap-2"><button onClick={actions.toggleTheme} className="w-full flex items-center justify-center lg:justify-start p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500"><Icon name={isDark ? "sun" : "moon"} /><span className="ml-3 hidden lg:block text-sm">{isDark ? "Modo Claro" : "Modo Escuro"}</span></button></div>
                     </aside>
-
-                    {/* Main */}
                     <main className="flex-1 flex flex-col h-full overflow-hidden relative">
                         <header className="h-16 bg-white/80 dark:bg-dark-bg/80 backdrop-blur border-b dark:border-gray-800 flex items-center justify-between px-6 z-10">
                             <h2 className="text-xl font-bold capitalize flex items-center gap-2"><Icon name="layout" className="text-blue-500"/> {view}</h2>
                             <div className="flex items-center gap-3">{view === 'kanban' && user.role !== 'viewer' && <button onClick={() => actions.openTaskModal()} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 shadow-lg"><Icon name="plus" size={16}/> Tarefa</button>}<div className="w-8 h-8 rounded-full bg-gradient-to-tr from-pink-500 to-orange-400 flex items-center justify-center text-white text-xs font-bold shadow-md" title={user.name}>{user.avatar}</div></div>
                         </header>
                         <div className={`flex-1 ${view === 'dashboard' ? 'overflow-y-auto' : 'overflow-hidden'} p-4 lg:p-6`}>
-                            {/* Injeção dos Componentes mantidos do passo anterior (FileModule, ChatModule, KanbanBoard, Dashboard) com dados do Firebase */}
                             {view === 'dashboard' && <Dashboard tasks={myTasks} users={myTeam} columns={myColumns} activities={myActivities} orgName={myOrg?.name} inviteCode={myOrg?.inviteCode} userRole={user.role} />}
                             {view === 'kanban' && <KanbanBoard tasks={myTasks} users={myTeam} columns={myColumns} actions={actions} userRole={user.role} />}
                             {view === 'ai' && <AIAssistant context={aiContext} />}
@@ -508,7 +639,6 @@
                             {view === 'settings' && <SettingsModule user={user} org={myOrg} team={myTeam} actions={actions} isDark={isDark} />}
                         </div>
                     </main>
-
                     <TaskModal isOpen={modalConfig.isOpen} task={modalConfig.task} users={myTeam} columns={myColumns} onClose={() => setModalConfig({ isOpen: false, task: null })} onSave={actions.saveTask} onDelete={actions.deleteTask} userRole={user.role} />
                 </div>
             );
@@ -516,44 +646,6 @@
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
-        
-        // --- COMPONENTES AUXILIARES (Definições necessárias para o App funcionar, copiadas da versão anterior para manter o código completo) ---
-        // (Devido ao limite de tamanho, estou redefinindo os componentes visuais aqui de forma concisa, garantindo que funcionem com os dados passados pelo App)
-        
-        // ... (Dashboard, KanbanBoard, ChatModule, FileModule, AIAssistant, TaskModal, SettingsModule definidos anteriormente permanecem funcionais pois recebem props) ...
-        // Vou reincluir os componentes cruciais para garantir que o arquivo seja self-contained.
-
-        function Dashboard({ tasks, users, columns, activities, orgName }) {
-             return <div className="space-y-6 max-w-6xl mx-auto animate-fade-in pb-10"><div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl p-8 text-white shadow-lg"><div><h2 className="text-3xl font-bold mb-1">{orgName}</h2><p className="opacity-90">Cloud Dashboard</p></div></div><div className="grid grid-cols-2 gap-4"><div className="bg-white dark:bg-dark-card p-5 rounded-xl border-l-4 border-blue-600"><div className="text-gray-500 text-xs font-bold uppercase">Tarefas</div><div className="text-3xl font-bold dark:text-white">{tasks.length}</div></div><div className="bg-white dark:bg-dark-card p-5 rounded-xl border-l-4 border-green-600"><div className="text-gray-500 text-xs font-bold uppercase">Membros</div><div className="text-3xl font-bold dark:text-white">{users.length}</div></div></div><div className="bg-white dark:bg-dark-card rounded-xl p-6 h-64 overflow-y-auto"><h3 className="font-bold dark:text-white mb-4">Atividades</h3>{activities.map(a => <div key={a.id} className="text-sm text-gray-600 dark:text-gray-400 py-1 border-b dark:border-gray-700"><span className="font-bold text-indigo-500">{a.user}</span> {a.text}</div>)}</div></div>;
-        }
-
-        function KanbanBoard({ tasks, users, columns, actions, userRole }) {
-            const handleDrop = (e, status) => { const id = e.dataTransfer.getData("id"); if (id) actions.moveTask(id, status); };
-            return <div className="flex h-full overflow-x-auto space-x-4 pb-2 items-start">{columns.map(col => <div key={col.id} onDragOver={e=>e.preventDefault()} onDrop={e=>handleDrop(e, col.id)} className="flex-shrink-0 w-80 bg-gray-100 dark:bg-gray-800 rounded-xl p-3 flex flex-col max-h-full"><div className="flex justify-between mb-3 px-1"><span className="font-bold dark:text-white">{col.title}</span>{userRole==='admin'&&<button onClick={()=>actions.deleteColumn(col.id)}><Icon name="trash-2" size={14}/></button>}</div><div className="flex-1 overflow-y-auto space-y-3 pb-2 min-h-[50px]">{tasks.filter(t => t.status === col.id).map(task => <div key={task.id} draggable onDragStart={e=>e.dataTransfer.setData("id", task.id)} onClick={()=>actions.openTaskModal(task)} className="bg-white dark:bg-dark-card p-4 rounded-lg shadow-sm cursor-pointer hover:shadow-md border dark:border-gray-700"><div className="text-sm font-medium dark:text-gray-200">{task.title}</div></div>)}</div></div>))}{userRole==='admin'&&<button onClick={actions.addColumn} className="w-12 flex-shrink-0 bg-gray-200 dark:bg-gray-800 rounded-xl flex items-center justify-center text-gray-400 h-[100px]"><Icon name="plus"/></button>}</div>;
-        }
-
-        function ChatModule({ currentUser, users, messages, onSendMessage }) {
-            const [text, setText] = useState("");
-            const scroll = useRef();
-            useEffect(()=>scroll.current?.scrollTo(0, scroll.current.scrollHeight), [messages]);
-            return <div className="flex h-full bg-white dark:bg-dark-card rounded-xl overflow-hidden border dark:border-gray-700"><div className="w-64 bg-gray-50 dark:bg-gray-900 p-4 border-r dark:border-gray-800"><h3 className="font-bold text-gray-500 text-xs uppercase mb-2">Equipe</h3>{users.map(u=><div key={u.id} className="flex items-center gap-2 p-2"><span className="text-xs bg-blue-100 px-1 rounded">{u.avatar}</span><span className="text-sm dark:text-white">{u.name}</span></div>)}</div><div className="flex-1 flex flex-col"><div className="flex-1 overflow-y-auto p-4 space-y-4" ref={scroll}>{messages.map((m,i)=><div key={i} className={`flex ${m.senderId===currentUser.id?'justify-end':'justify-start'}`}><div className={`p-3 rounded-2xl max-w-[70%] text-sm ${m.senderId===currentUser.id?'bg-blue-600 text-white':'bg-gray-100 dark:bg-gray-800 dark:text-white'}`}><div className="text-[10px] opacity-70 mb-1">{users.find(u=>u.id===m.senderId)?.name}</div>{m.text}</div></div>)}</div><div className="p-4 border-t dark:border-gray-800 flex gap-2"><input className="flex-1 bg-gray-100 dark:bg-gray-800 rounded-full px-4 py-2 outline-none dark:text-white" value={text} onChange={e=>setText(e.target.value)} onKeyPress={e=>e.key==='Enter'&&onSendMessage({text, channelId:'general', type:'public'})}/><button onClick={()=>onSendMessage({text, channelId:'general', type:'public'})}><Icon name="send" className="text-blue-600"/></button></div></div></div>;
-        }
-
-        function FileModule({ files, onUpload, onDelete }) {
-            return <div className="h-full bg-white dark:bg-dark-card rounded-xl p-6 border dark:border-gray-700"><div className="flex justify-between mb-6"><h2 className="text-xl font-bold dark:text-white">Arquivos</h2><label className="bg-blue-600 text-white px-4 py-2 rounded cursor-pointer">Upload <input type="file" className="hidden" onChange={e=>{const f=e.target.files[0]; if(f){const r=new FileReader(); r.onload=ev=>onUpload({name:f.name, size:f.size, type:f.type, data:ev.target.result}); r.readAsDataURL(f);}}}/></label></div><div className="grid grid-cols-2 md:grid-cols-4 gap-4">{files.map(f=><div key={f.id} className="p-4 border dark:border-gray-700 rounded-xl relative group"><div className="flex justify-between mb-2"><Icon name="file" className="text-blue-500"/><button onClick={()=>onDelete(f.id)} className="opacity-0 group-hover:opacity-100 text-red-500"><Icon name="trash-2" size={14}/></button></div><div className="truncate font-bold text-sm dark:text-white">{f.name}</div><div className="text-xs text-gray-500">{formatBytes(f.size)}</div><a href={f.data} download={f.name} className="absolute inset-0"/></div>)}</div></div>;
-        }
-
-        function AIAssistant() { return <div className="h-full flex items-center justify-center text-gray-400">IA disponível na versão Pro</div>; }
-        
-        function TaskModal({ isOpen, onClose, task, users, columns, onSave, onDelete }) {
-            const [d, setD] = useState({});
-            useEffect(()=>setD(task||{title:'', status: columns[0]?.id, assignee: users[0]?.id}), [task, columns, users]);
-            if(!isOpen) return null;
-            return <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay p-4"><div className="bg-white dark:bg-dark-card rounded-xl w-full max-w-lg p-6 space-y-4"><h3 className="font-bold text-xl dark:text-white">{task?'Editar':'Nova'}</h3><input className="w-full p-2 border rounded dark:bg-gray-800 dark:text-white" value={d.title} onChange={e=>setD({...d, title:e.target.value})} placeholder="Título"/><div className="flex justify-end gap-2"><button onClick={onClose} className="px-4 py-2">Cancelar</button><button onClick={()=>onSave(d)} className="bg-blue-600 text-white px-6 py-2 rounded">Salvar</button></div></div></div>;
-        }
-
-        function SettingsModule({ user, actions }) { return <div className="p-8 bg-white dark:bg-dark-card rounded-xl h-full"><h2 className="text-2xl font-bold mb-6 dark:text-white">Perfil</h2><div className="mb-4"><label className="block text-sm text-gray-500">ID de Usuário (Compartilhe para ser adicionado)</label><div className="flex gap-2"><code className="bg-gray-100 p-2 rounded block flex-1">{user.id}</code><button onClick={()=>actions.logout()} className="text-red-500">Sair</button></div></div></div>; }
-
     </script>
 </body>
 </html>
