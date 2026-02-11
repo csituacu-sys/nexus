@@ -67,34 +67,66 @@
     <script type="text/babel">
         const { useState, useEffect, useRef, useMemo } = React;
 
+        // ==========================================
+        //  CONFIGURAÇÃO DO FIREBASE (PREENCHA AQUI)
+        // ==========================================
+        // Para hospedar no GitHub, substitua o 'null' abaixo pelo seu objeto de configuração do Firebase.
+        // Ele deve se parecer com: { apiKey: "...", authDomain: "...", projectId: "...", ... }
+        
+        const MANUAL_FIREBASE_CONFIG = {
+            apiKey: "AIzaSyC995HDmWSRlteMNcMEsZ9hLI5INr20uqM",
+            authDomain: "nexus-926c0.firebaseapp.com",
+            projectId: "nexus-926c0",
+            storageBucket: "nexus-926c0.firebasestorage.app",
+            messagingSenderId: "119492865606",
+            appId: "1:119492865606:web:f069ea08f758641ea2a447",
+            measurementId: "G-78Z22GXDDX"
+        };
+
+        // ==========================================
+
         // --- FIREBASE SETUP ---
         const useFirebase = () => {
             const [db, setDb] = useState(null);
             const [appId, setAppId] = useState(null);
             const [isReady, setIsReady] = useState(false);
+            const [configError, setConfigError] = useState(false);
 
             useEffect(() => {
                 const init = async () => {
-                    if (!window.Firebase || !window.__firebase_config) return;
+                    if (!window.Firebase) return;
                     
-                    const { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, getFirestore } = window.Firebase;
-                    const config = JSON.parse(window.__firebase_config);
-                    const app = initializeApp(config);
-                    const auth = getAuth(app);
-                    const firestore = getFirestore(app);
-                    const currentAppId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'nexus-default';
+                    // Prioriza a config injetada (ambiente de dev), senão usa a manual (produção/github)
+                    const configStr = window.__firebase_config;
+                    let config = configStr ? JSON.parse(configStr) : MANUAL_FIREBASE_CONFIG;
 
+                    if (!config) {
+                        setConfigError(true);
+                        return;
+                    }
+                    
                     try {
+                        const { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, getFirestore } = window.Firebase;
+                        const app = initializeApp(config);
+                        const auth = getAuth(app);
+                        const firestore = getFirestore(app);
+                        
+                        // ID do App para separar dados (opcional em prod, útil em dev)
+                        const currentAppId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'nexus-production';
+
                         if (window.__initial_auth_token) {
                             await signInWithCustomToken(auth, window.__initial_auth_token);
                         } else {
+                            // Em produção, autenticação anônima permite ler/escrever se as regras do Firestore permitirem
                             await signInAnonymously(auth);
                         }
+                        
                         setDb(firestore);
                         setAppId(currentAppId);
                         setIsReady(true);
                     } catch (err) {
-                        console.error("Firebase auth error:", err);
+                        console.error("Erro ao inicializar Firebase:", err);
+                        setConfigError(true);
                     }
                 };
                 
@@ -106,7 +138,7 @@
                 }, 100);
             }, []);
 
-            return { db, appId, isReady };
+            return { db, appId, isReady, configError };
         };
 
         // --- CONSTANTES ---
@@ -169,9 +201,12 @@
                         let orgId, role;
                         if (formData.inviteCode) {
                              if (!formData.orgName && !formData.inviteCode) throw new Error("Preencha os dados da empresa.");
-                             // Em um caso real, validaria o código no banco
-                             // Aqui, vamos assumir criação se não achar ou mockar
+                             // Lógica simplificada: Em produção, validar código no banco
+                             // Por enquanto, criamos uma nova org se não achar, ou simulamos entrada
                              const orgsRef = collection(db, 'artifacts', appId, 'public', 'data', 'orgs');
+                             
+                             // MOCK: Para MVP sem query complexa, vamos criar uma nova org com esse nome se invite falhar ou assumir sucesso
+                             // Para garantir funcionamento, vamos criar uma org se for "register"
                              const newOrg = { 
                                  name: formData.orgName || "Nova Empresa", 
                                  inviteCode: Math.random().toString(36).substring(7).toUpperCase(),
@@ -442,22 +477,104 @@
             return (
                 <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay p-4">
                     <div className="bg-white dark:bg-dark-card rounded-xl shadow-2xl w-full max-w-lg animate-fade-in flex flex-col max-h-[90vh]">
+                        {/* Header */}
                         <div className="flex justify-between items-center p-5 border-b dark:border-gray-700">
                             <h3 className="font-bold text-xl text-gray-800 dark:text-gray-100">{task ? "Editar Tarefa" : "Nova Tarefa"}</h3>
                             <button onClick={onClose} className="text-gray-400 hover:text-red-500 transition"><Icon name="x" size={24} /></button>
                         </div>
+                        
+                        {/* Body */}
                         <div className="p-6 overflow-y-auto space-y-4">
-                            <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Título</label><input className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-gray-900 dark:text-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 focus:outline-none transition" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="Ex: Atualizar Documentação" disabled={userRole === 'viewer'} autoFocus /></div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Prioridade</label><select className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-gray-900 dark:text-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 outline-none" value={formData.priority} onChange={e => setFormData({...formData, priority: e.target.value})} disabled={userRole === 'viewer'}><option value="low">Baixa</option><option value="medium">Média</option><option value="high">Alta</option></select></div>
-                                <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Responsável</label><select className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-gray-900 dark:text-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 outline-none" value={formData.assignee} onChange={e => setFormData({...formData, assignee: parseInt(e.target.value)})} disabled={userRole === 'viewer'}>{users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</select></div>
+                            {/* Título */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Título</label>
+                                <input 
+                                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-gray-900 dark:text-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 focus:outline-none transition" 
+                                    value={formData.title} 
+                                    onChange={e => setFormData({...formData, title: e.target.value})} 
+                                    placeholder="Ex: Atualizar Documentação" 
+                                    disabled={userRole === 'viewer'}
+                                    autoFocus 
+                                />
                             </div>
-                            <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Coluna (Status)</label><select className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-gray-900 dark:text-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 outline-none" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} disabled={userRole === 'viewer'}>{columns.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}</select></div>
-                            <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Descrição</label><textarea className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-gray-900 dark:text-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 outline-none h-32 resize-none" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Detalhes adicionais..." disabled={userRole === 'viewer'} /></div>
+
+                            {/* Grid: Prioridade & Responsável */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Prioridade</label>
+                                    <select 
+                                        className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-gray-900 dark:text-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 outline-none" 
+                                        value={formData.priority} 
+                                        onChange={e => setFormData({...formData, priority: e.target.value})}
+                                        disabled={userRole === 'viewer'}
+                                    >
+                                        <option value="low">Baixa</option>
+                                        <option value="medium">Média</option>
+                                        <option value="high">Alta</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Responsável</label>
+                                    <select 
+                                        className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-gray-900 dark:text-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 outline-none" 
+                                        value={formData.assignee} 
+                                        onChange={e => setFormData({...formData, assignee: parseInt(e.target.value)})}
+                                        disabled={userRole === 'viewer'}
+                                    >
+                                        {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* Coluna (Status) */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Coluna (Status)</label>
+                                <select 
+                                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-gray-900 dark:text-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 outline-none" 
+                                    value={formData.status} 
+                                    onChange={e => setFormData({...formData, status: e.target.value})}
+                                    disabled={userRole === 'viewer'}
+                                >
+                                    {columns.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+                                </select>
+                            </div>
+
+                            {/* Descrição */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Descrição</label>
+                                <textarea 
+                                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-gray-900 dark:text-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 outline-none h-32 resize-none" 
+                                    value={formData.description} 
+                                    onChange={e => setFormData({...formData, description: e.target.value})} 
+                                    placeholder="Detalhes adicionais..." 
+                                    disabled={userRole === 'viewer'}
+                                />
+                            </div>
                         </div>
+
+                        {/* Footer */}
                         <div className="p-5 border-t dark:border-gray-700 flex items-center justify-between bg-gray-50 dark:bg-gray-800/50 rounded-b-xl">
-                            <div>{task && userRole !== 'viewer' && (<button onClick={() => { if(confirm("Excluir esta tarefa?")) onDelete(task.id); }} className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg transition flex items-center gap-2 text-sm font-medium"><Icon name="trash-2" size={16} /> Excluir</button>)}</div>
-                            <div className="flex gap-3"><button onClick={onClose} className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition text-sm font-medium">Cancelar</button>{userRole !== 'viewer' && (<button onClick={() => onSave({ ...task, ...formData })} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-lg shadow-blue-500/30 transition transform active:scale-95 text-sm">Salvar</button>)}</div>
+                            <div>
+                                {task && userRole !== 'viewer' && (
+                                    <button 
+                                        onClick={() => { if(confirm("Excluir esta tarefa?")) onDelete(task.id); }} 
+                                        className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg transition flex items-center gap-2 text-sm font-medium"
+                                    >
+                                        <Icon name="trash-2" size={16} /> Excluir
+                                    </button>
+                                )}
+                            </div>
+                            <div className="flex gap-3">
+                                <button onClick={onClose} className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition text-sm font-medium">Cancelar</button>
+                                {userRole !== 'viewer' && (
+                                    <button 
+                                        onClick={() => onSave({ ...task, ...formData })} 
+                                        className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-lg shadow-blue-500/30 transition transform active:scale-95 text-sm"
+                                    >
+                                        Salvar
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -541,7 +658,7 @@
 
         // --- APP PRINCIPAL (CONECTADO AO FIREBASE) ---
         const App = () => {
-            const { db, appId, isReady } = useFirebase();
+            const { db, appId, isReady, configError } = useFirebase();
             const [user, setUser] = useState(null);
             const [isDark, setIsDark] = useState(false);
             const [view, setView] = useState('dashboard');
@@ -609,6 +726,25 @@
 
             const aiContext = { tasks: myTasks, users: myTeam, columns: myColumns, isDark, view, ...actions };
 
+            if (configError) return (
+                <div className="min-h-screen flex flex-col items-center justify-center bg-gray-900 text-white p-8 text-center">
+                    <div className="bg-red-900/50 p-6 rounded-2xl border border-red-700 max-w-lg">
+                        <Icon name="alert-triangle" size={48} className="mx-auto mb-4 text-red-400" />
+                        <h1 className="text-2xl font-bold mb-2">Configuração do Firebase Ausente</h1>
+                        <p className="text-gray-300 mb-6">Para usar este app hospedado no GitHub ou fora do editor, você precisa fornecer suas chaves do Firebase.</p>
+                        <div className="text-left bg-black/50 p-4 rounded-lg font-mono text-xs overflow-auto max-h-48 mb-4 border border-gray-700">
+                            // Abra o código (index.html) e preencha:<br/>
+                            const MANUAL_FIREBASE_CONFIG = &#123;<br/>
+                            &nbsp;&nbsp;apiKey: "SUA_API_KEY",<br/>
+                            &nbsp;&nbsp;authDomain: "...",<br/>
+                            &nbsp;&nbsp;projectId: "..."<br/>
+                            &#125;;
+                        </div>
+                        <p className="text-sm text-gray-400">Edite o arquivo index.html e procure por "MANUAL_FIREBASE_CONFIG".</p>
+                    </div>
+                </div>
+            );
+
             if (!isReady) return <div className="min-h-screen flex items-center justify-center text-gray-500">Conectando à Nuvem...</div>;
             if (!user) return <AuthScreen onLogin={setUser} db={db} appId={appId} usersData={users} />;
 
@@ -631,6 +767,7 @@
                             <div className="flex items-center gap-3">{view === 'kanban' && user.role !== 'viewer' && <button onClick={() => actions.openTaskModal()} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 shadow-lg"><Icon name="plus" size={16}/> Tarefa</button>}<div className="w-8 h-8 rounded-full bg-gradient-to-tr from-pink-500 to-orange-400 flex items-center justify-center text-white text-xs font-bold shadow-md" title={user.name}>{user.avatar}</div></div>
                         </header>
                         <div className={`flex-1 ${view === 'dashboard' ? 'overflow-y-auto' : 'overflow-hidden'} p-4 lg:p-6`}>
+                            {/* Injeção dos Componentes mantidos do passo anterior (FileModule, ChatModule, KanbanBoard, Dashboard) com dados do Firebase */}
                             {view === 'dashboard' && <Dashboard tasks={myTasks} users={myTeam} columns={myColumns} activities={myActivities} orgName={myOrg?.name} inviteCode={myOrg?.inviteCode} userRole={user.role} />}
                             {view === 'kanban' && <KanbanBoard tasks={myTasks} users={myTeam} columns={myColumns} actions={actions} userRole={user.role} />}
                             {view === 'ai' && <AIAssistant context={aiContext} />}
@@ -639,6 +776,7 @@
                             {view === 'settings' && <SettingsModule user={user} org={myOrg} team={myTeam} actions={actions} isDark={isDark} />}
                         </div>
                     </main>
+
                     <TaskModal isOpen={modalConfig.isOpen} task={modalConfig.task} users={myTeam} columns={myColumns} onClose={() => setModalConfig({ isOpen: false, task: null })} onSave={actions.saveTask} onDelete={actions.deleteTask} userRole={user.role} />
                 </div>
             );
